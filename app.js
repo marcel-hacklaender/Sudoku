@@ -87,8 +87,12 @@ function generate(level) {
 /* ---------- Zustand ---------- */
 
 const STORE_KEY = 'sudoku-state-v1';
+const HELPS_KEY = 'sudoku-helps';
 let S = null;           // aktuelles Spiel
 let notesMode = false;
+// Hilfen (Markierungen, rote Fehler, Zähler, Tipp). Standard: aus, wie auf Papier.
+let helps = false;
+try { helps = localStorage.getItem(HELPS_KEY) === 'on'; } catch (e) { /* egal */ }
 let timerId = null;
 
 function newGame(level = 'medium') {
@@ -140,7 +144,9 @@ function enter(n) {
     pushHistory(i);
     S.values[i] = n;
     S.notes[i] = 0;
-    if (n !== S.solution[i]) {
+    if (!helps) {
+      // wie auf Papier: keine Rückmeldung
+    } else if (n !== S.solution[i]) {
       S.mistakes++;
     } else {
       // passende Notizen bei den Nachbarn entfernen
@@ -203,6 +209,10 @@ function moveSel(dr, dc) {
 }
 
 function checkWin() {
+  if (S.values.every((v) => v) && S.values.some((v, i) => v !== S.solution[i])) {
+    if (!helps) toast('Alle Felder sind voll, aber irgendwo stimmt noch etwas nicht.');
+    return;
+  }
   if (S.values.every((v, i) => v === S.solution[i])) {
     S.won = true;
     stopTimer();
@@ -211,13 +221,14 @@ function checkWin() {
     const m = S.mistakes;
     document.getElementById('win-text').textContent =
       `${LEVELS[S.level].name} in ${fmtTime(S.elapsed)}` +
-      (m === 0 ? ' und ohne Fehler.' : ` mit ${m} ${m === 1 ? 'Fehler' : 'Fehlern'}.`);
+      (!helps ? '.' : m === 0 ? ' und ohne Fehler.' : ` mit ${m} ${m === 1 ? 'Fehler' : 'Fehlern'}.`);
     setTimeout(() => winDialog.showModal(), 500);
   }
 }
 
 // Zeile/Spalte/Box kurz aufleuchten lassen, wenn komplett
 function flashCompleted(i) {
+  if (!helps) return;
   const groups = [
     [...Array(81).keys()].filter((k) => ROW(k) === ROW(i)),
     [...Array(81).keys()].filter((k) => COL(k) === COL(i)),
@@ -269,6 +280,18 @@ const notesBtn = document.getElementById('notes-btn');
 const notesState = document.getElementById('notes-state');
 const newDialog = document.getElementById('new-dialog');
 const winDialog = document.getElementById('win-dialog');
+const helpsBtn = document.getElementById('helps-btn');
+const helpsState = document.getElementById('helps-state');
+const hintBtn = document.getElementById('hint-btn');
+const toastEl = document.getElementById('toast');
+
+let toastId = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastId);
+  toastId = setTimeout(() => toastEl.classList.remove('show'), 3500);
+}
 
 const cellEls = [];
 for (let i = 0; i < 81; i++) {
@@ -294,7 +317,7 @@ for (let n = 1; n <= 9; n++) {
 function render() {
   const sel = S.selected;
   const selVal = sel >= 0 ? S.values[sel] : 0;
-  const peers = sel >= 0 ? new Set(PEERS[sel]) : new Set();
+  const peers = helps && sel >= 0 ? new Set(PEERS[sel]) : new Set();
 
   for (let i = 0; i < 81; i++) {
     const el = cellEls[i];
@@ -302,8 +325,8 @@ function render() {
     el.classList.toggle('given', !!S.puzzle[i]);
     el.classList.toggle('selected', i === sel);
     el.classList.toggle('peer', peers.has(i));
-    el.classList.toggle('same', !!selVal && v === selVal && i !== sel);
-    el.classList.toggle('wrong', !!v && !S.puzzle[i] && v !== S.solution[i]);
+    el.classList.toggle('same', helps && !!selVal && v === selVal && i !== sel);
+    el.classList.toggle('wrong', helps && !!v && !S.puzzle[i] && v !== S.solution[i]);
 
     if (v) {
       if (el.textContent !== String(v) || el.firstChild?.nodeType !== 3) el.textContent = v;
@@ -311,7 +334,7 @@ function render() {
       let html = '<div class="notes">';
       for (let n = 1; n <= 9; n++) {
         const on = S.notes[i] & (1 << n);
-        html += `<span${on && n === selVal ? ' class="hl"' : ''}>${on ? n : ''}</span>`;
+        html += `<span${on && helps && n === selVal ? ' class="hl"' : ''}>${on ? n : ''}</span>`;
       }
       el.innerHTML = html + '</div>';
     } else {
@@ -324,13 +347,16 @@ function render() {
   S.values.forEach((v, i) => { if (v && v === S.solution[i]) counts[v]++; });
   padBtns.forEach((b, k) => {
     const left = 9 - counts[k + 1];
-    b.classList.toggle('done', left === 0);
-    b.querySelector('small').textContent = left ? left : '';
+    b.classList.toggle('done', helps && left === 0);
+    b.querySelector('small').textContent = helps && left ? left : '';
   });
 
   timerEl.textContent = fmtTime(S.elapsed);
   mistakesEl.textContent = `${S.mistakes} Fehler`;
   levelEl.textContent = LEVELS[S.level].name;
+  document.body.classList.toggle('no-helps', !helps);
+  helpsBtn.setAttribute('aria-pressed', String(helps));
+  helpsState.textContent = helps ? 'an' : 'aus';
   notesBtn.setAttribute('aria-pressed', String(notesMode));
   notesState.textContent = notesMode ? 'an' : 'aus';
 }
@@ -339,7 +365,13 @@ function render() {
 
 document.getElementById('undo-btn').addEventListener('click', undo);
 document.getElementById('erase-btn').addEventListener('click', erase);
-document.getElementById('hint-btn').addEventListener('click', hint);
+hintBtn.addEventListener('click', hint);
+helpsBtn.addEventListener('click', () => {
+  helps = !helps;
+  try { localStorage.setItem(HELPS_KEY, helps ? 'on' : 'off'); } catch (e) { /* egal */ }
+  render();
+  toast(helps ? 'Hilfen an: Markierungen, rote Fehler und Tipps.' : 'Hilfen aus: wie auf Papier, geprüft wird am Ende.');
+});
 notesBtn.addEventListener('click', () => { notesMode = !notesMode; render(); });
 document.getElementById('new-btn').addEventListener('click', () => newDialog.showModal());
 

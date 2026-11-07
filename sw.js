@@ -1,5 +1,5 @@
 // Offline-Cache. Bei Änderungen an den Dateien VERSION erhöhen.
-const VERSION = 'sudoku-v1';
+const VERSION = 'sudoku-v2';
 const FILES = [
   './',
   'index.html',

@@ -24,9 +24,10 @@
         <span id="level-label">Mittel</span>
         <span class="dot">·</span>
         <span id="timer">0:00</span>
-        <span class="dot">·</span>
-        <span id="mistakes">0 Fehler</span>
+        <span class="dot helps-only">·</span>
+        <span id="mistakes" class="helps-only">0 Fehler</span>
       </div>
+      <button id="helps-btn" class="btn ghost-btn" aria-pressed="false">Hilfen <b id="helps-state">aus</b></button>
       <button id="new-btn" class="btn">Neues Spiel</button>
     </header>
 
@@ -80,6 +81,8 @@
       <button value="close" class="btn ghost">Schließen</button>
     </form>
   </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>
 </body>
